@@ -1,0 +1,23 @@
+{
+  "name": "dns-caching",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "dns",
+    "caching",
+    "cache"
+  ],
+  "author": "",
+  "license": "MIT",
+  "description": "",
+  "dependencies": {
+    "lru-cache": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.3"
+  }
+}
