@@ -1,0 +1,60 @@
+name: Publish NPM Package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Setup repo
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          registry-url: 'https://registry.npmjs.org'
+
+      # - name: 🛠 Run version update script
+      #   if: startsWith(github.ref, 'refs/tags/')
+      #   run: node scripts/new-version.mjs ${{ github.ref_name }}
+
+      # - name: 🔧 Configure Git
+      #   if: startsWith(github.ref, 'refs/tags/')
+      #   run: |
+      #     git config user.name "github-actions[bot]"
+      #     git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # - name: 📤 Commit version changes
+      #   if: startsWith(github.ref, 'refs/tags/')
+      #   run: |
+      #     git fetch origin ${{ github.event.repository.default_branch }}
+      #     git checkout ${{ github.event.repository.default_branch }}
+      #     git pull
+      #     git add package.json package-lock.json
+      #     git commit -m "chore: update version to ${{ github.ref_name }}"
+      #     git push origin ${{ github.event.repository.default_branch }}
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 👷 Build Typescript app
+        run: |
+          npm run build
+
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: 🚀 Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
