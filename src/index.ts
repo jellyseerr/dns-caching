@@ -64,7 +64,7 @@ export interface DnsCacheManagerOptions {
   logger?: Logger;
 }
 
-export default class DnsCacheManager {
+export class DnsCacheManager {
 
   private cache: LRUCache<string, DnsCache>;
   private resolver: dns.promises.Resolver;
