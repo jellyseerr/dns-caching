@@ -105,8 +105,10 @@ const customDnsCacheManager = new DnsCacheManager({
 
 This setup will help you efficiently manage DNS lookups with caching, improving the performance and reliability of your application.
 
+## Credits
+
+Created by [fallenbagel](https://github.com/fallenbagel) and packaged by [gauthier-th](https://github.com/gauthier-thc)
+
 ## License
 
 MIT © [jellyseerr](https://github.com/jellyseerr)
-
-Created by [fallenbagel](https://github.com/fallenbagel) and [gauthier-th](https://github.com/gauthier-thc)
