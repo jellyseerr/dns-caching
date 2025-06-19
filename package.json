@@ -1,8 +1,9 @@
 {
   "name": "dns-caching",
-  "version": "v0.1.2",
+  "version": "v0.1.3",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
+  "types": "dist/index.d.ts",
   "repository": {
     "type": "git",
     "url": "https://github.com/jellyseerr/dns-caching"
