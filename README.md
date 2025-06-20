@@ -22,10 +22,11 @@ Import the DnsCacheManager and initialize it with optional configurations:
 import DnsCacheManager from 'dns-caching';
 
 const dnsCacheManager = new DnsCacheManager({
-  cacheMaxEntries: 1000, // Optional: Maximum number of entries in the cache
-  hardTtlMs: 600000,     // Optional: Hard TTL in milliseconds
-  maxRetries: 5,         // Optional: Maximum number of retries for DNS lookup
-  logger: console,       // Optional: Custom logger
+  cacheMaxEntries: 500, // Optional: Maximum number of entries in the cache
+  forceMaxTtl: -1,      // Optional: Maximum TTL for cached entries in ms (-1 = no limit)
+  forceMinTtl: 0,       // Optional: Minimum TTL for cached entries in ms
+  maxRetries: 3,        // Optional: Maximum number of retries for DNS lookup
+  logger: console,      // Optional: Custom logger
 });
 ```
 
