@@ -5,10 +5,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Get the version from the command line arguments
-const version = process.argv[2];
+let version = process.argv[2];
 if (!version) {
   console.error('Please provide a version number as an argument.');
   process.exit(1);
+}
+if (version.startsWith('v')) {
+  version = version.slice(1);
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
