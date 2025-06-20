@@ -97,7 +97,7 @@ export class DnsCacheManager {
       ttl: forceMaxTtl > 0 ? forceMaxTtl : undefined,
     });
     this.forceMaxTtl = forceMaxTtl;
-    this.forceMinTtl = forceMinTtl >= 0 ? forceMinTtl : 0;
+    this.forceMinTtl = forceMinTtl > 0 ? forceMinTtl : 0;
     this.resolver = new dns.promises.Resolver();
     this.maxRetries = maxRetries;
 
@@ -524,7 +524,7 @@ export class DnsCacheManager {
         ipv6: [] as string[],
       };
 
-      let minTtl = this.forceMinTtl;
+      let minTtl = 300;
 
       if (ipv4Records.status === 'fulfilled' && ipv4Records.value.length > 0) {
         addresses.ipv4 = ipv4Records.value.map((record) => record.address);
@@ -582,7 +582,7 @@ export class DnsCacheManager {
       activeAddress: entry.activeAddress,
       family: entry.family || (entry.activeAddress.includes(':') ? 6 : 4),
       timestamp: entry.timestamp || Date.now(),
-      ttl: entry.ttl || 60000,
+      ttl: Math.max(this.forceMinTtl, entry.ttl || 60000),
       networkErrors: entry.networkErrors || 0,
       hits: entry.hits || 0,
       misses: entry.misses || 0,
