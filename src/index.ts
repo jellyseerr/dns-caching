@@ -59,7 +59,8 @@ export interface Logger {
 
 export interface DnsCacheManagerOptions {
   cacheMaxEntries?: number;
-  hardTtlMs?: number;
+  forceMaxTtl?: number;
+  forceMinTtl?: number;
   maxRetries?: number;
   logger?: Logger;
 }
@@ -74,7 +75,8 @@ export class DnsCacheManager {
     failures: 0,
     ipv4Fallbacks: 0,
   };
-  private hardTtlMs: number;
+  private forceMaxTtl: number;
+  private forceMinTtl: number;
   private maxRetries: number;
   private originalDnsLookup: typeof dns.lookup;
   private originalPromisify: typeof dns.lookup.__promisify__;
@@ -82,7 +84,8 @@ export class DnsCacheManager {
 
   constructor({
     cacheMaxEntries = 500,
-    hardTtlMs = 300000,
+    forceMaxTtl = -1,
+    forceMinTtl = 0,
     maxRetries = 3,
     logger = console
   }: DnsCacheManagerOptions = {}) {
@@ -91,9 +94,10 @@ export class DnsCacheManager {
 
     this.cache = new LRUCache<string, DnsCache>({
       max: cacheMaxEntries,
-      ttl: hardTtlMs,
+      ttl: forceMaxTtl > 0 ? forceMaxTtl : undefined,
     });
-    this.hardTtlMs = hardTtlMs;
+    this.forceMaxTtl = forceMaxTtl;
+    this.forceMinTtl = forceMinTtl >= 0 ? forceMinTtl : 0;
     this.resolver = new dns.promises.Resolver();
     this.maxRetries = maxRetries;
 
@@ -315,7 +319,7 @@ export class DnsCacheManager {
       }
 
       // Soft expiration. Will use stale entry while refreshing
-      if (age < this.hardTtlMs) {
+      if (this.forceMaxTtl > 0 && age < this.forceMaxTtl) {
         cached.misses++;
         this.stats.misses++;
 
@@ -336,7 +340,7 @@ export class DnsCacheManager {
               activeAddress,
               family,
               timestamp: Date.now(),
-              ttl: result.ttl,
+              ttl: Math.max(this.forceMinTtl, result.ttl),
               networkErrors: 0,
               hits: existing?.hits ?? 0,
               misses: (existing?.misses ?? 0) + 1,
@@ -374,7 +378,7 @@ export class DnsCacheManager {
         activeAddress,
         family,
         timestamp: Date.now(),
-        ttl: result.ttl,
+        ttl: Math.max(this.forceMinTtl, result.ttl),
         networkErrors: 0,
         hits: 0,
         misses: existingMisses + 1,
@@ -520,7 +524,7 @@ export class DnsCacheManager {
         ipv6: [] as string[],
       };
 
-      let minTtl = 300;
+      let minTtl = this.forceMinTtl;
 
       if (ipv4Records.status === 'fulfilled' && ipv4Records.value.length > 0) {
         addresses.ipv4 = ipv4Records.value.map((record) => record.address);
