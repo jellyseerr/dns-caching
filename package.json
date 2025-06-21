@@ -23,7 +23,8 @@
   "description": "",
   "exports": {
     "require": "./dist/cjs/index.js",
-    "import": "./dist/esm/index.js"
+    "import": "./dist/esm/index.js",
+    "types": "./dist/index.d.ts"
   },
   "files": [
     "LICENSE",
