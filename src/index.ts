@@ -480,7 +480,7 @@ export class DnsCacheManager {
   }
 
   private getStaleEntry(hostname: string): DnsCache | null {
-    const entry = (this.cache as any).store.get(hostname)?.value;
+    const entry = (this.cache as any).store?.get(hostname)?.value;
     if (entry) {
       if (!entry.addresses && entry.address) {
         return {
