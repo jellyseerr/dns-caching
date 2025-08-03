@@ -38,7 +38,6 @@ export interface DnsCache {
   family: number;
   timestamp: number;
   ttl: number;
-  networkErrors?: number;
   hits: number;
   misses: number;
 }
@@ -181,7 +180,6 @@ export class DnsCacheManager {
                       : fam || 4,
                     timestamp: Date.now(),
                     ttl: 60000,
-                    networkErrors: 0,
                     hits: 0,
                     misses: 0,
                   };
@@ -275,7 +273,6 @@ export class DnsCacheManager {
         family: 4,
         timestamp: Date.now(),
         ttl: 0,
-        networkErrors: 0,
         hits: 0,
         misses: 0,
       };
@@ -341,7 +338,6 @@ export class DnsCacheManager {
               family,
               timestamp: Date.now(),
               ttl: Math.max(this.forceMinTtl, result.ttl),
-              networkErrors: 0,
               hits: existing?.hits ?? 0,
               misses: (existing?.misses ?? 0) + 1,
             });
@@ -379,7 +375,6 @@ export class DnsCacheManager {
         family,
         timestamp: Date.now(),
         ttl: Math.max(this.forceMinTtl, result.ttl),
-        networkErrors: 0,
         hits: 0,
         misses: existingMisses + 1,
       };
@@ -480,19 +475,18 @@ export class DnsCacheManager {
   }
 
   private getStaleEntry(hostname: string): DnsCache | null {
-    const entry = (this.cache as any).store.get(hostname)?.value;
+    const entry = this.cache.get(hostname);
     if (entry) {
-      if (!entry.addresses && entry.address) {
+      if (!entry.addresses && entry.activeAddress) {
         return {
           addresses: {
-            ipv4: entry.family === 4 ? [entry.address] : [],
-            ipv6: entry.family === 6 ? [entry.address] : [],
+            ipv4: entry.family === 4 ? [entry.activeAddress] : [],
+            ipv6: entry.family === 6 ? [entry.activeAddress] : [],
           },
-          activeAddress: entry.address,
+          activeAddress: entry.activeAddress,
           family: entry.family,
           timestamp: entry.timestamp,
           ttl: entry.ttl,
-          networkErrors: 0,
           hits: entry.hits,
           misses: entry.misses,
         };
@@ -583,7 +577,6 @@ export class DnsCacheManager {
       family: entry.family || (entry.activeAddress.includes(':') ? 6 : 4),
       timestamp: entry.timestamp || Date.now(),
       ttl: Math.max(this.forceMinTtl, entry.ttl || 60000),
-      networkErrors: entry.networkErrors || 0,
       hits: entry.hits || 0,
       misses: entry.misses || 0,
     };
@@ -620,7 +613,6 @@ export class DnsCacheManager {
         family: validatedEntry.family,
         timestamp: validatedEntry.timestamp,
         ttl: validatedEntry.ttl,
-        networkErrors: 0,
         hits: 0,
         misses: 0,
       };
@@ -739,7 +731,6 @@ export class DnsCacheManager {
           family,
           timestamp: Date.now(),
           ttl: 60000,
-          networkErrors: 0,
           hits: 0,
           misses: 0,
         });
@@ -785,64 +776,9 @@ export class DnsCacheManager {
       family,
       timestamp: Date.now(),
       ttl: 30000,
-      networkErrors: 0,
       hits: 0,
       misses: 0,
     };
-  }
-
-  reportNetworkError(hostname: string) {
-    const entry = this.cache.get(hostname);
-    if (entry) {
-      if (!entry.addresses && (entry as any).address) {
-        const oldEntry = entry as any;
-        entry.addresses = {
-          ipv4: oldEntry.family === 4 ? [oldEntry.address] : [],
-          ipv6: oldEntry.family === 6 ? [oldEntry.address] : [],
-        };
-        entry.activeAddress = oldEntry.address;
-        delete (entry as any).address;
-      }
-
-      entry.networkErrors = (entry.networkErrors || 0) + 1;
-
-      // If there are multiple network errors for this address and alternatives exist, then switch
-      if (entry.networkErrors > 2) {
-        if (entry.family === 6 && entry.addresses.ipv4.length > 0) {
-          this.logger.info(
-            `Switching ${hostname} from IPv6 to IPv4 after network errors`,
-            {
-              label: 'DNSCache',
-              oldAddress: entry.activeAddress,
-              newAddress: entry.addresses.ipv4[0],
-              errors: entry.networkErrors,
-            }
-          );
-
-          entry.activeAddress = entry.addresses.ipv4[0];
-          entry.family = 4;
-          entry.networkErrors = 0;
-        } else if (entry.family === 4 && entry.addresses.ipv4.length > 1) {
-          const currentIndex = entry.addresses.ipv4.indexOf(
-            entry.activeAddress
-          );
-          const nextIndex = (currentIndex + 1) % entry.addresses.ipv4.length;
-
-          this.logger.info(
-            `Rotating to next IPv4 address for ${hostname} after network errors`,
-            {
-              label: 'DNSCache',
-              oldAddress: entry.activeAddress,
-              newAddress: entry.addresses.ipv4[nextIndex],
-              errors: entry.networkErrors,
-            }
-          );
-
-          entry.activeAddress = entry.addresses.ipv4[nextIndex];
-          entry.networkErrors = 0;
-        }
-      }
-    }
   }
 
   getStats() {
@@ -866,7 +802,6 @@ export class DnsCacheManager {
         family: number;
         age: number;
         ttl: number;
-        networkErrors?: number;
         hits: number;
         misses: number;
       }
@@ -885,7 +820,6 @@ export class DnsCacheManager {
         family: data.family,
         age,
         ttl,
-        networkErrors: data.networkErrors,
         hits: data.hits,
         misses: data.misses,
       };
@@ -909,7 +843,6 @@ export class DnsCacheManager {
       family: entry.family,
       age: Date.now() - entry.timestamp,
       ttl: Math.max(0, entry.ttl - (Date.now() - entry.timestamp)),
-      networkErrors: entry.networkErrors,
     };
   }
 
