@@ -277,6 +277,20 @@ export class DnsCacheManager {
         misses: 0,
       };
     }
+    else if (hostname === '::1') {
+      return {
+        addresses: {
+          ipv4: [],
+          ipv6: ['::1'],
+        },
+        activeAddress: '::1',
+        family: 6,
+        timestamp: Date.now(),
+        ttl: 0,
+        hits: 0,
+        misses: 0,
+      };
+    }
 
     // force ipv4 if configured
     const shouldForceIpv4 = forceIpv4;
