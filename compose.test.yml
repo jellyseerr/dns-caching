@@ -19,7 +19,7 @@ services:
     image: node:22-alpine
     command: >
       sh -c "npm config set update-notifier false
-             npx jest --no-watch --runInBand"
+             npm ci && npx jest --no-watch --runInBand"
     volumes:
       - .:/app
     working_dir: /app
