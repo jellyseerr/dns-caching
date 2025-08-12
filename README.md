@@ -2,7 +2,7 @@
 
 A small package to cache DNS lookups in Node.js, with support for custom DNS servers and TTL (time-to-live) settings.
 
-[![NPM](https://img.shields.io/npm/v/dns-caching.svg)](https://www.npmjs.com/package/dns-caching) ![npm bundle size](https://img.shields.io/bundlephobia/min/dns-caching) ![npm](https://img.shields.io/npm/dt/dns-caching) ![GitHub](https://img.shields.io/github/license/jellyseerr/dns-caching)
+![GitHub repo size](https://img.shields.io/github/repo-size/jellyseerr/dns-caching) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/jellyseerr/dns-caching/tests.yml?label=tests) [![NPM](https://img.shields.io/npm/v/dns-caching.svg)](https://www.npmjs.com/package/dns-caching) ![npm](https://img.shields.io/npm/dt/dns-caching) ![GitHub](https://img.shields.io/github/license/jellyseerr/dns-caching) ![npm package minimized gzipped size](https://img.shields.io/bundlejs/size/dns-caching) 
 
 ## Install
 

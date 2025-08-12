@@ -1,4 +1,4 @@
-name: Run Jest Tests with dnsmasq
+name: Run Tests with Jest
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
