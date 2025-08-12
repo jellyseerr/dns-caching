@@ -92,10 +92,8 @@ For advanced use cases, you can customize the behavior of the DNS cache manager 
 
 ```javascript
 const customLogger = {
-  warn: (message, meta) => console.warn(message, meta),
   debug: (message, meta) => console.debug(message, meta),
   error: (message, meta) => console.error(message, meta),
-  info: (message, meta) => console.info(message, meta),
 };
 
 const customDnsCacheManager = new DnsCacheManager({

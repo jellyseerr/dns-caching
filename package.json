@@ -9,9 +9,10 @@
     "url": "https://github.com/jellyseerr/dns-caching"
   },
   "scripts": {
+    "test": "sudo docker compose  -f compose.test.yml up --no-log-prefix --abort-on-container-exit",
     "build": "npm run build:cjs && npm run build:esm",
-    "build:cjs": "tsc -p tsconfig.cjs.json",
-    "build:esm": "tsc -p tsconfig.esm.json"
+    "build:esm": "tsc -p tsconfig.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json"
   },
   "keywords": [
     "dns",
@@ -35,7 +36,10 @@
     "lru-cache": "^11.1.0"
   },
   "devDependencies": {
+    "@jest/globals": "^30.0.5",
     "@types/node": "^24.0.3",
+    "jest": "^30.0.5",
+    "ts-jest": "^29.4.1",
     "typescript": "^5.8.3"
   }
 }

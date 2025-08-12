@@ -1,0 +1,38 @@
+services:
+  dnsmasq:
+    image: andyshinn/dnsmasq
+    command:
+      [
+        "-k",
+        "--log-facility=-",
+        "--address=/test-jest.local/1.2.3.4",
+        "--address=/test-jest.local/2001:db8::1",
+        "--local-ttl=2"
+      ]
+    networks:
+      dns_net:
+        ipv4_address: 172.28.0.53   # Static IP for DNS
+    expose:
+      - "53/udp"  # Only exposed to the network, not the host
+
+  jest:
+    image: node:22-alpine
+    command: >
+      sh -c "npm config set update-notifier false
+             npx jest --no-watch --runInBand"
+    volumes:
+      - .:/app
+    working_dir: /app
+    depends_on:
+      - dnsmasq
+    dns:
+      - 172.28.0.53  # Only use dnsmasq for DNS
+    networks:
+      - dns_net
+    tty: true
+networks:
+  dns_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

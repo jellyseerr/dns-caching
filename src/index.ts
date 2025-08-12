@@ -50,10 +50,8 @@ interface CacheStats {
 }
 
 export interface Logger {
-  warn: (message: string, meta?: Record<string, any>) => void;
   debug: (message: string, meta?: Record<string, any>) => void;
   error: (message: string, meta?: Record<string, any>) => void;
-  info: (message: string, meta?: Record<string, any>) => void;
 }
 
 export interface DnsCacheManagerOptions {
@@ -142,7 +140,7 @@ export class DnsCacheManager {
           }
         })
         .catch((error) => {
-          this.logger.warn(
+          this.logger.debug(
             `Cached DNS lookup failed for ${hostname}, falling back to native DNS: ${error.message}`,
             {
               label: 'DNSCache',
@@ -179,7 +177,7 @@ export class DnsCacheManager {
                       ? addr[0]?.family || 4
                       : fam || 4,
                     timestamp: Date.now(),
-                    ttl: 60000,
+                    ttl: Math.min(Math.max(this.forceMinTtl, 60000), this.forceMaxTtl),
                     hits: 0,
                     misses: 0,
                   };
@@ -210,14 +208,14 @@ export class DnsCacheManager {
         });
     }) as LookupFunction;
 
-    (wrappedLookup as any).__promisify__ = async function (
+    (wrappedLookup as any).__promisify__ = async (
       hostname: string,
       options?:
         | dns.LookupAllOptions
         | dns.LookupOneOptions
         | number
         | dns.LookupOptions
-    ): Promise<dns.LookupAddress[] | { address: string; family: number }> {
+    ): Promise<dns.LookupAddress[] | { address: string; family: number }> => {
       try {
         const result = await this.lookup(hostname);
 
@@ -308,7 +306,7 @@ export class DnsCacheManager {
         ) {
           const ipv4Address = cached.addresses.ipv4[0];
           this.logger.debug(
-            `Switching from IPv6 to IPv4 for ${hostname} in cypress testing`,
+            `Switching from IPv6 to IPv4 for ${hostname}`,
             {
               label: 'DNSCache',
               oldAddress: cached.activeAddress,
@@ -401,7 +399,7 @@ export class DnsCacheManager {
 
       if (retryCount < this.maxRetries) {
         const backoff = Math.min(100 * Math.pow(2, retryCount), 2000);
-        this.logger.warn(
+        this.logger.debug(
           `DNS lookup failed for ${hostname}, retrying (${retryCount + 1}/${
             this.maxRetries
           }) after ${backoff}ms`,
@@ -418,11 +416,16 @@ export class DnsCacheManager {
 
         return this.lookup(hostname, retryCount + 1, shouldTryIpv4);
       }
+      else {
+        this.logger.debug(`DNS lookup failed for ${hostname} after ${this.maxRetries} retries`, {
+          label: 'DNSCache',
+        });
+      }
 
       // If there is a stale entry, use it as last resort
       const staleEntry = this.getStaleEntry(hostname);
       if (staleEntry) {
-        this.logger.warn(
+        this.logger.debug(
           `Using expired DNS cache as fallback for ${hostname} after ${this.maxRetries} failed lookups`,
           {
             label: 'DNSCache',
@@ -430,7 +433,7 @@ export class DnsCacheManager {
           }
         );
 
-        // If cypress testing and IPv4 addresses are available, use those instead
+        // If we want to force IPv4 and IPv4 addresses are available, use those instead
         if (
           shouldForceIpv4 &&
           staleEntry.family === 6 &&
@@ -452,14 +455,14 @@ export class DnsCacheManager {
             activeAddress: ipv4Address,
             family: 4,
             timestamp: Date.now(),
-            ttl: 60000,
+            ttl: Math.min(Math.max(this.forceMinTtl, staleEntry.ttl || 60000), this.forceMaxTtl),
           };
         }
 
         return {
           ...staleEntry,
           timestamp: Date.now(),
-          ttl: 60000,
+          ttl: Math.min(Math.max(this.forceMinTtl, staleEntry.ttl || 60000), this.forceMaxTtl),
         };
       }
 
@@ -509,7 +512,6 @@ export class DnsCacheManager {
     }
     return null;
   }
-
   private async resolveWithTtl(
     hostname: string
   ): Promise<{ addresses: { ipv4: string[]; ipv6: string[] }; ttl: number }> {
@@ -532,17 +534,21 @@ export class DnsCacheManager {
         ipv6: [] as string[],
       };
 
-      let minTtl = 300;
+      let minTtl = Infinity;
 
       if (ipv4Records.status === 'fulfilled' && ipv4Records.value.length > 0) {
         addresses.ipv4 = ipv4Records.value.map((record) => record.address);
 
         // Find minimum TTL from IPv4 records
-        const ipv4MinTtl = Math.min(
-          ...ipv4Records.value.map((r) => r.ttl || 300)
-        );
-        if (ipv4MinTtl > 0 && ipv4MinTtl < minTtl) {
-          minTtl = ipv4MinTtl;
+        const ipv4TtlValues = ipv4Records.value
+          .map((r) => r.ttl)
+          .filter((ttl): ttl is number => ttl !== undefined);
+          
+        if (ipv4TtlValues.length > 0) {
+          const ipv4MinTtl = Math.min(...ipv4TtlValues);
+          if (ipv4MinTtl < minTtl) {
+            minTtl = ipv4MinTtl;
+          }
         }
       }
 
@@ -550,11 +556,15 @@ export class DnsCacheManager {
         addresses.ipv6 = ipv6Records.value.map((record) => record.address);
 
         // Find minimum TTL from IPv6 records
-        const ipv6MinTtl = Math.min(
-          ...ipv6Records.value.map((r) => r.ttl || 300)
-        );
-        if (ipv6MinTtl > 0 && ipv6MinTtl < minTtl) {
-          minTtl = ipv6MinTtl;
+        const ipv6TtlValues = ipv6Records.value
+          .map((r) => r.ttl)
+          .filter((ttl): ttl is number => ttl !== undefined);
+          
+        if (ipv6TtlValues.length > 0) {
+          const ipv6MinTtl = Math.min(...ipv6TtlValues);
+          if (ipv6MinTtl < minTtl) {
+            minTtl = ipv6MinTtl;
+          }
         }
       }
 
@@ -562,13 +572,15 @@ export class DnsCacheManager {
         throw new Error(`No DNS records found for ${hostname}`);
       }
 
+      // If no TTL was found, use a sensible default
+      if (minTtl === Infinity) {
+        minTtl = 300; // Default to 300 seconds if no TTL returned
+      }
+
       const ttlMs = minTtl * 1000;
 
       return { addresses, ttl: ttlMs };
     } catch (error) {
-      this.logger.error(`Failed to resolve ${hostname} with TTL: ${error instanceof Error ? error.message : error}`, {
-        label: 'DNSCache',
-      });
       throw error;
     }
   }
@@ -590,7 +602,7 @@ export class DnsCacheManager {
       activeAddress: entry.activeAddress,
       family: entry.family || (entry.activeAddress.includes(':') ? 6 : 4),
       timestamp: entry.timestamp || Date.now(),
-      ttl: Math.max(this.forceMinTtl, entry.ttl || 60000),
+      ttl: Math.max(this.forceMinTtl, entry.ttl),
       hits: entry.hits || 0,
       misses: entry.misses || 0,
     };
@@ -662,7 +674,7 @@ export class DnsCacheManager {
    * Respects system DNS configuration
    */
   async fallbackLookup(hostname: string): Promise<DnsCache> {
-    this.logger.warn(`Performing fallback DNS lookup for ${hostname}`, {
+    this.logger.debug(`Performing fallback DNS lookup for ${hostname}`, {
       label: 'DNSCache',
     });
 
@@ -744,7 +756,7 @@ export class DnsCacheManager {
           activeAddress,
           family,
           timestamp: Date.now(),
-          ttl: 60000,
+          ttl: Math.min(Math.max(this.forceMinTtl, 60000), this.forceMaxTtl),
           hits: 0,
           misses: 0,
         });
@@ -757,11 +769,9 @@ export class DnsCacheManager {
    * This uses a different internal implementation than dns.lookup
    */
   private async tryNodePromisesLookup(hostname: string): Promise<DnsCache> {
-    const resolver = new dns.promises.Resolver();
-
     const [ipv4Results, ipv6Results] = await Promise.allSettled([
-      resolver.resolve4(hostname).catch(() => []),
-      resolver.resolve6(hostname).catch(() => []),
+      this.resolver.resolve4(hostname).catch(() => []),
+      this.resolver.resolve6(hostname).catch(() => []),
     ]);
 
     const ipv4Addresses =
