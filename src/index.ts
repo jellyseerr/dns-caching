@@ -54,6 +54,28 @@ export interface Logger {
   error: (message: string, meta?: Record<string, any>) => void;
 }
 
+export type DnsEntry = {
+  addresses: { ipv4: number; ipv6: number };
+  activeAddress: string;
+  family: number;
+  age: number;
+  ttl: number;
+  hits: number;
+  misses: number;
+};
+
+export type DnsEntries = Record<string, DnsEntry>;
+
+export interface DnsStats {
+  size: number;
+  cacheMaxEntries: number;
+  hits: number;
+  misses: number;
+  failures: number;
+  ipv4Fallbacks: number;
+  hitRate: number;
+}
+
 export interface DnsCacheManagerOptions {
   cacheMaxEntries?: number;
   forceMaxTtl?: number;
@@ -805,7 +827,7 @@ export class DnsCacheManager {
     };
   }
 
-  getStats() {
+  getStats(): DnsStats {
     return {
       size: this.cache.size,
       cacheMaxEntries: this.cache.max,
@@ -817,19 +839,8 @@ export class DnsCacheManager {
     };
   }
 
-  getCacheEntries() {
-    const entries: Record<
-      string,
-      {
-        addresses: { ipv4: number; ipv6: number };
-        activeAddress: string;
-        family: number;
-        age: number;
-        ttl: number;
-        hits: number;
-        misses: number;
-      }
-    > = {};
+  getCacheEntries(): DnsEntries {
+    const entries: DnsEntries = {};
 
     for (const [hostname, data] of this.cache.entries()) {
       const age = Date.now() - data.timestamp;
@@ -852,7 +863,7 @@ export class DnsCacheManager {
     return entries;
   }
 
-  getCacheEntry(hostname: string) {
+  getCacheEntry(hostname: string): DnsEntry | null {
     const entry = this.cache.get(hostname);
     if (!entry) {
       return null;
@@ -867,6 +878,8 @@ export class DnsCacheManager {
       family: entry.family,
       age: Date.now() - entry.timestamp,
       ttl: Math.max(0, entry.ttl - (Date.now() - entry.timestamp)),
+      hits: entry.hits,
+      misses: entry.misses,
     };
   }
 
