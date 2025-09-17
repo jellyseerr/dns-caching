@@ -151,7 +151,7 @@ export class DnsCacheManager {
 
       const forceIpv4 = reqFamily === 4;
 
-      this.lookup(hostname)
+      this.lookup(hostname, 0, forceIpv4)
         .then((result) => {
           if (reqAll) {
             const allAddresses: dns.LookupAddress[] = [
