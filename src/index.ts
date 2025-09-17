@@ -1,5 +1,5 @@
-import { LRUCache } from 'lru-cache';
-import dns from 'node:dns';
+import { LRUCache } from "lru-cache";
+import dns from "node:dns";
 
 type LookupCallback = (
   err: NodeJS.ErrnoException | null,
@@ -85,7 +85,6 @@ export interface DnsCacheManagerOptions {
 }
 
 export class DnsCacheManager {
-
   private cache: LRUCache<string, DnsCache>;
   private resolver: dns.promises.Resolver;
   private stats: CacheStats = {
@@ -106,7 +105,7 @@ export class DnsCacheManager {
     forceMaxTtl = -1,
     forceMinTtl = 0,
     maxRetries = 3,
-    logger = console
+    logger = console,
   }: DnsCacheManagerOptions = {}) {
     this.originalDnsLookup = dns.lookup;
     this.originalPromisify = this.originalDnsLookup.__promisify__;
@@ -133,39 +132,74 @@ export class DnsCacheManager {
         | dns.LookupAllOptions,
       callback: LookupCallback
     ): void => {
-      if (typeof options === 'function') {
+      if (typeof options === "function") {
         callback = options;
         options = {};
       }
 
+      const opts =
+        typeof options === "number"
+          ? ({ family: options } as dns.LookupOptions)
+          : options || ({} as dns.LookupOptions | dns.LookupAllOptions);
+
+      const reqFamily =
+        typeof (opts as dns.LookupOptions).family === "number"
+          ? (opts as dns.LookupOptions).family
+          : 0;
+
+      const reqAll = (opts as dns.LookupAllOptions).all === true;
+
+      const forceIpv4 = reqFamily === 4;
+
       this.lookup(hostname)
         .then((result) => {
-          if ((options as dns.LookupOptions).all) {
-            const allAddresses: dns.LookupAddress[] = [];
+          if (reqAll) {
+            const allAddresses: dns.LookupAddress[] = [
+              ...result.addresses.ipv4.map((addr) => ({
+                address: addr,
+                family: 4 as const,
+              })),
+              ...result.addresses.ipv6.map((addr) => ({
+                address: addr,
+                family: 6 as const,
+              })),
+            ];
 
-            result.addresses.ipv4.forEach((addr) => {
-              allAddresses.push({ address: addr, family: 4 });
-            });
-
-            result.addresses.ipv6.forEach((addr) => {
-              allAddresses.push({ address: addr, family: 6 });
-            });
-
+            // keep current fallback behavior if no addresses found
             callback(
               null,
               allAddresses.length > 0
                 ? allAddresses
                 : [{ address: result.activeAddress, family: result.family }]
             );
-          } else {
-            callback(null, result.activeAddress, result.family);
+            return;
           }
+
+          // if a specific family is requested but no addresses of that family are found, return ENOTFOUND
+          // similar to native node.js dns.lookup behavior
+          if (reqFamily === 4 && result.addresses.ipv4.length === 0) {
+            const err = Object.assign(new Error(`ENOTFOUND ${hostname}`), {
+              code: "ENOTFOUND",
+            });
+            callback(err, undefined, undefined);
+            return;
+          }
+          if (reqFamily === 6 && result.addresses.ipv6.length === 0) {
+            const err = Object.assign(new Error(`ENOTFOUND ${hostname}`), {
+              code: "ENOTFOUND",
+            });
+            callback(err, undefined, undefined);
+            return;
+          }
+
+          // otherwise return the active address
+          callback(null, result.activeAddress, result.family);
         })
         .catch((error) => {
           this.logger.debug(
             `Cached DNS lookup failed for ${hostname}, falling back to native DNS: ${error.message}`,
             {
-              label: 'DNSCache',
+              label: "DNSCache",
             }
           );
 
@@ -179,27 +213,30 @@ export class DnsCacheManager {
                     addresses: {
                       ipv4: Array.isArray(addr)
                         ? addr
-                            .filter((a) => !a.address.includes(':'))
+                            .filter((a) => a.family === 4)
                             .map((a) => a.address)
-                        : typeof addr === 'string' && !addr.includes(':')
+                        : typeof addr === "string" && !addr.includes(":")
                         ? [addr]
                         : [],
                       ipv6: Array.isArray(addr)
                         ? addr
-                            .filter((a) => a.address.includes(':'))
+                            .filter((a) => a.family === 6)
                             .map((a) => a.address)
-                        : typeof addr === 'string' && addr.includes(':')
+                        : typeof addr === "string" && addr.includes(":")
                         ? [addr]
                         : [],
                     },
                     activeAddress: Array.isArray(addr)
-                      ? addr[0]?.address || ''
-                      : addr,
+                      ? addr[0]?.address || ""
+                      : (addr as string),
                     family: Array.isArray(addr)
                       ? addr[0]?.family || 4
                       : fam || 4,
                     timestamp: Date.now(),
-                    ttl: Math.min(Math.max(this.forceMinTtl, 60000), this.forceMaxTtl),
+                    ttl: Math.min(
+                      Math.max(this.forceMinTtl, 60000),
+                      this.forceMaxTtl
+                    ),
                     hits: 0,
                     misses: 0,
                   };
@@ -208,7 +245,7 @@ export class DnsCacheManager {
                     this.logger.debug(
                       `Failed to update DNS cache for ${hostname}: ${error.message}`,
                       {
-                        label: 'DNSCache',
+                        label: "DNSCache",
                       }
                     );
                   });
@@ -219,9 +256,13 @@ export class DnsCacheManager {
             return;
           } catch (fallbackError) {
             this.logger.error(
-              `Native DNS fallback also failed for ${hostname}: ${fallbackError instanceof Error ? fallbackError.message : fallbackError}`,
+              `Native DNS fallback also failed for ${hostname}: ${
+                fallbackError instanceof Error
+                  ? fallbackError.message
+                  : fallbackError
+              }`,
               {
-                label: 'DNSCache',
+                label: "DNSCache",
               }
             );
           }
@@ -238,28 +279,48 @@ export class DnsCacheManager {
         | number
         | dns.LookupOptions
     ): Promise<dns.LookupAddress[] | { address: string; family: number }> => {
+      const opts =
+        typeof options === "number"
+          ? ({ family: options } as dns.LookupOptions)
+          : ((options || {}) as dns.LookupOptions | dns.LookupAllOptions);
+
+      const reqFamily =
+        typeof (opts as dns.LookupOptions).family === "number"
+          ? (opts as dns.LookupOptions).family
+          : 0;
+      const reqAll = (opts as dns.LookupAllOptions).all === true;
+
       try {
-        const result = await this.lookup(hostname);
+        const result = await this.lookup(hostname, 0, reqFamily === 4);
 
-        if (
-          options &&
-          typeof options === 'object' &&
-          'all' in options &&
-          options.all === true
-        ) {
-          const allAddresses: dns.LookupAddress[] = [];
-
-          result.addresses.ipv4.forEach((addr: string) => {
-            allAddresses.push({ address: addr, family: 4 });
-          });
-
-          result.addresses.ipv6.forEach((addr: string) => {
-            allAddresses.push({ address: addr, family: 6 });
-          });
-
+        // same behavior as above callback version
+        if (reqAll) {
+          const allAddresses: dns.LookupAddress[] = [
+            ...result.addresses.ipv4.map((addr) => ({
+              address: addr,
+              family: 4 as const,
+            })),
+            ...result.addresses.ipv6.map((addr) => ({
+              address: addr,
+              family: 6 as const,
+            })),
+          ];
           return allAddresses.length > 0
             ? allAddresses
             : [{ address: result.activeAddress, family: result.family }];
+        }
+
+        if (reqFamily === 4 && result.addresses.ipv4.length === 0) {
+          const err = Object.assign(new Error(`ENOTFOUND ${hostname}`), {
+            code: "ENOTFOUND",
+          });
+          throw err;
+        }
+        if (reqFamily === 6 && result.addresses.ipv6.length === 0) {
+          const err = Object.assign(new Error(`ENOTFOUND ${hostname}`), {
+            code: "ENOTFOUND",
+          });
+          throw err;
         }
 
         return { address: result.activeAddress, family: result.family };
@@ -283,27 +344,26 @@ export class DnsCacheManager {
     retryCount = 0,
     forceIpv4 = false
   ): Promise<DnsCache> {
-    if (hostname === 'localhost') {
+    if (hostname === "localhost") {
       return {
         addresses: {
-          ipv4: ['127.0.0.1'],
-          ipv6: ['::1'],
+          ipv4: ["127.0.0.1"],
+          ipv6: ["::1"],
         },
-        activeAddress: '127.0.0.1',
+        activeAddress: "127.0.0.1",
         family: 4,
         timestamp: Date.now(),
         ttl: 0,
         hits: 0,
         misses: 0,
       };
-    }
-    else if (hostname === '::1') {
+    } else if (hostname === "::1") {
       return {
         addresses: {
           ipv4: [],
-          ipv6: ['::1'],
+          ipv6: ["::1"],
         },
-        activeAddress: '::1',
+        activeAddress: "::1",
         family: 6,
         timestamp: Date.now(),
         ttl: 0,
@@ -327,14 +387,11 @@ export class DnsCacheManager {
           cached.addresses.ipv4.length > 0
         ) {
           const ipv4Address = cached.addresses.ipv4[0];
-          this.logger.debug(
-            `Switching from IPv6 to IPv4 for ${hostname}`,
-            {
-              label: 'DNSCache',
-              oldAddress: cached.activeAddress,
-              newAddress: ipv4Address,
-            }
-          );
+          this.logger.debug(`Switching from IPv6 to IPv4 for ${hostname}`, {
+            label: "DNSCache",
+            oldAddress: cached.activeAddress,
+            newAddress: ipv4Address,
+          });
 
           this.stats.ipv4Fallbacks++;
           return {
@@ -363,7 +420,7 @@ export class DnsCacheManager {
               result.addresses,
               preferredFamily
             );
-            const family = activeAddress.includes(':') ? 6 : 4;
+            const family = activeAddress.includes(":") ? 6 : 4;
 
             const existing = this.cache.get(hostname);
             this.cache.set(hostname, {
@@ -399,7 +456,7 @@ export class DnsCacheManager {
         result.addresses,
         preferredFamily
       );
-      const family = activeAddress.includes(':') ? 6 : 4;
+      const family = activeAddress.includes(":") ? 6 : 4;
 
       const existingMisses = this.cache.get(hostname)?.misses ?? 0;
 
@@ -426,7 +483,7 @@ export class DnsCacheManager {
             this.maxRetries
           }) after ${backoff}ms`,
           {
-            label: 'DNSCache',
+            label: "DNSCache",
             error: error instanceof Error ? error.message : error,
           }
         );
@@ -437,11 +494,13 @@ export class DnsCacheManager {
         const shouldTryIpv4 = retryCount === this.maxRetries - 1 && !forceIpv4;
 
         return this.lookup(hostname, retryCount + 1, shouldTryIpv4);
-      }
-      else {
-        this.logger.debug(`DNS lookup failed for ${hostname} after ${this.maxRetries} retries`, {
-          label: 'DNSCache',
-        });
+      } else {
+        this.logger.debug(
+          `DNS lookup failed for ${hostname} after ${this.maxRetries} retries`,
+          {
+            label: "DNSCache",
+          }
+        );
       }
 
       // If there is a stale entry, use it as last resort
@@ -450,7 +509,7 @@ export class DnsCacheManager {
         this.logger.debug(
           `Using expired DNS cache as fallback for ${hostname} after ${this.maxRetries} failed lookups`,
           {
-            label: 'DNSCache',
+            label: "DNSCache",
             activeAddress: staleEntry.activeAddress,
           }
         );
@@ -466,7 +525,7 @@ export class DnsCacheManager {
           this.logger.debug(
             `Switching expired cache from IPv6 to IPv4 for ${hostname} in test mode`,
             {
-              label: 'DNSCache',
+              label: "DNSCache",
               oldAddress: staleEntry.activeAddress,
               newAddress: ipv4Address,
             }
@@ -477,19 +536,27 @@ export class DnsCacheManager {
             activeAddress: ipv4Address,
             family: 4,
             timestamp: Date.now(),
-            ttl: Math.min(Math.max(this.forceMinTtl, staleEntry.ttl || 60000), this.forceMaxTtl),
+            ttl: Math.min(
+              Math.max(this.forceMinTtl, staleEntry.ttl || 60000),
+              this.forceMaxTtl
+            ),
           };
         }
 
         return {
           ...staleEntry,
           timestamp: Date.now(),
-          ttl: Math.min(Math.max(this.forceMinTtl, staleEntry.ttl || 60000), this.forceMaxTtl),
+          ttl: Math.min(
+            Math.max(this.forceMinTtl, staleEntry.ttl || 60000),
+            this.forceMaxTtl
+          ),
         };
       }
 
       throw new Error(
-        `DNS lookup failed for ${hostname} after ${this.maxRetries} retries: ${error instanceof Error ? error.message : error}`
+        `DNS lookup failed for ${hostname} after ${this.maxRetries} retries: ${
+          error instanceof Error ? error.message : error
+        }`
       );
     }
   }
@@ -503,13 +570,13 @@ export class DnsCacheManager {
         ? addresses.ipv4[0]
         : addresses.ipv6.length > 0
         ? addresses.ipv6[0]
-        : '127.0.0.1';
+        : "127.0.0.1";
     } else {
       return addresses.ipv6.length > 0
         ? addresses.ipv6[0]
         : addresses.ipv4.length > 0
         ? addresses.ipv4[0]
-        : '127.0.0.1';
+        : "127.0.0.1";
     }
   }
 
@@ -539,10 +606,10 @@ export class DnsCacheManager {
   ): Promise<{ addresses: { ipv4: string[]; ipv6: string[] }; ttl: number }> {
     if (
       !this.resolver ||
-      typeof this.resolver.resolve4 !== 'function' ||
-      typeof this.resolver.resolve6 !== 'function'
+      typeof this.resolver.resolve4 !== "function" ||
+      typeof this.resolver.resolve6 !== "function"
     ) {
-      throw new Error('Resolver is not initialized');
+      throw new Error("Resolver is not initialized");
     }
 
     try {
@@ -558,14 +625,14 @@ export class DnsCacheManager {
 
       let minTtl = Infinity;
 
-      if (ipv4Records.status === 'fulfilled' && ipv4Records.value.length > 0) {
+      if (ipv4Records.status === "fulfilled" && ipv4Records.value.length > 0) {
         addresses.ipv4 = ipv4Records.value.map((record) => record.address);
 
         // Find minimum TTL from IPv4 records
         const ipv4TtlValues = ipv4Records.value
           .map((r) => r.ttl)
           .filter((ttl): ttl is number => ttl !== undefined);
-          
+
         if (ipv4TtlValues.length > 0) {
           const ipv4MinTtl = Math.min(...ipv4TtlValues);
           if (ipv4MinTtl < minTtl) {
@@ -574,14 +641,14 @@ export class DnsCacheManager {
         }
       }
 
-      if (ipv6Records.status === 'fulfilled' && ipv6Records.value.length > 0) {
+      if (ipv6Records.status === "fulfilled" && ipv6Records.value.length > 0) {
         addresses.ipv6 = ipv6Records.value.map((record) => record.address);
 
         // Find minimum TTL from IPv6 records
         const ipv6TtlValues = ipv6Records.value
           .map((r) => r.ttl)
           .filter((ttl): ttl is number => ttl !== undefined);
-          
+
         if (ipv6TtlValues.length > 0) {
           const ipv6MinTtl = Math.min(...ipv6TtlValues);
           if (ipv6MinTtl < minTtl) {
@@ -613,7 +680,7 @@ export class DnsCacheManager {
    */
   async updateCache(hostname: string, entry: DnsCache): Promise<void> {
     if (!entry || !entry.activeAddress || !entry.addresses) {
-      throw new Error('Invalid cache entry provided');
+      throw new Error("Invalid cache entry provided");
     }
 
     const validatedEntry: DnsCache = {
@@ -622,7 +689,7 @@ export class DnsCacheManager {
         ipv6: Array.isArray(entry.addresses.ipv6) ? entry.addresses.ipv6 : [],
       },
       activeAddress: entry.activeAddress,
-      family: entry.family || (entry.activeAddress.includes(':') ? 6 : 4),
+      family: entry.family || (entry.activeAddress.includes(":") ? 6 : 4),
       timestamp: entry.timestamp || Date.now(),
       ttl: Math.max(this.forceMinTtl, entry.ttl),
       hits: entry.hits || 0,
@@ -633,7 +700,7 @@ export class DnsCacheManager {
       validatedEntry.addresses.ipv4.length === 0 &&
       validatedEntry.addresses.ipv6.length === 0
     ) {
-      if (validatedEntry.activeAddress.includes(':')) {
+      if (validatedEntry.activeAddress.includes(":")) {
         validatedEntry.addresses.ipv6.push(validatedEntry.activeAddress);
       } else {
         validatedEntry.addresses.ipv4.push(validatedEntry.activeAddress);
@@ -667,7 +734,7 @@ export class DnsCacheManager {
 
       this.cache.set(hostname, mergedEntry);
       this.logger.debug(`Updated DNS cache for ${hostname} with merged entry`, {
-        label: 'DNSCache',
+        label: "DNSCache",
         addresses: {
           ipv4: mergedEntry.addresses.ipv4.length,
           ipv6: mergedEntry.addresses.ipv6.length,
@@ -678,7 +745,7 @@ export class DnsCacheManager {
     } else {
       this.cache.set(hostname, validatedEntry);
       this.logger.debug(`Added new DNS cache entry for ${hostname}`, {
-        label: 'DNSCache',
+        label: "DNSCache",
         addresses: {
           ipv4: validatedEntry.addresses.ipv4.length,
           ipv6: validatedEntry.addresses.ipv6.length,
@@ -697,7 +764,7 @@ export class DnsCacheManager {
    */
   async fallbackLookup(hostname: string): Promise<DnsCache> {
     this.logger.debug(`Performing fallback DNS lookup for ${hostname}`, {
-      label: 'DNSCache',
+      label: "DNSCache",
     });
 
     // Try different DNS resolution methods
@@ -720,9 +787,11 @@ export class DnsCacheManager {
       } catch (error) {
         lastError = error;
         this.logger.debug(
-          `Fallback strategy failed for ${hostname}: ${error instanceof Error ? error.message : error}`,
+          `Fallback strategy failed for ${hostname}: ${
+            error instanceof Error ? error.message : error
+          }`,
           {
-            label: 'DNSCache',
+            label: "DNSCache",
             strategy: strategy.name,
           }
         );
@@ -747,7 +816,7 @@ export class DnsCacheManager {
         }
 
         if (!addresses || addresses.length === 0) {
-          reject(new Error('No addresses returned'));
+          reject(new Error("No addresses returned"));
           return;
         }
 
@@ -769,7 +838,7 @@ export class DnsCacheManager {
           activeAddress = ipv4Addresses[0];
           family = 4;
         } else {
-          reject(new Error('No valid addresses found'));
+          reject(new Error("No valid addresses found"));
           return;
         }
 
@@ -797,12 +866,12 @@ export class DnsCacheManager {
     ]);
 
     const ipv4Addresses =
-      ipv4Results.status === 'fulfilled' ? ipv4Results.value : [];
+      ipv4Results.status === "fulfilled" ? ipv4Results.value : [];
     const ipv6Addresses =
-      ipv6Results.status === 'fulfilled' ? ipv6Results.value : [];
+      ipv6Results.status === "fulfilled" ? ipv6Results.value : [];
 
     if (ipv4Addresses.length === 0 && ipv6Addresses.length === 0) {
-      throw new Error('No addresses resolved');
+      throw new Error("No addresses resolved");
     }
 
     let activeAddress: string;
@@ -891,7 +960,7 @@ export class DnsCacheManager {
     if (this.cache.has(hostname)) {
       this.cache.delete(hostname);
       this.logger.debug(`Cleared DNS cache entry for ${hostname}`, {
-        label: 'DNSCache',
+        label: "DNSCache",
       });
     }
   }
@@ -907,7 +976,6 @@ export class DnsCacheManager {
     this.stats.misses = 0;
     this.stats.failures = 0;
     this.stats.ipv4Fallbacks = 0;
-    this.logger.debug('DNS cache cleared', { label: 'DNSCache' });
+    this.logger.debug("DNS cache cleared", { label: "DNSCache" });
   }
-
 }
