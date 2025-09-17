@@ -105,7 +105,6 @@ describe("DnsCacheManager Lookup Tests", () => {
   });
 
   test("dns.lookup honors family:4 (Force IPv4 ON)", (done) => {
-    manager.initialize();
     dns.lookup("test-jest.local", { family: 4 }, (err, address, family) => {
       expect(err).toBeNull();
       expect(address).toBe("1.2.3.4");
@@ -139,12 +138,10 @@ describe("DnsCacheManager Lookup Tests", () => {
   });
 
   test("dns.lookup returns ENOTFOUND when family:4 is requested but only AAAA exists", (done) => {
-    const m = new DnsCacheManager();
-    jest.spyOn(m as any, "resolveWithTtl").mockResolvedValue({
+    jest.spyOn(manager as any, "resolveWithTtl").mockResolvedValue({
       addresses: { ipv4: [], ipv6: ["2001:db8::2"] },
       ttl: 60000,
     });
-    m.initialize();
 
     dns.lookup("onlyv6.local", { family: 4 }, (err, address, family) => {
       expect(err).toBeTruthy();
@@ -156,14 +153,10 @@ describe("DnsCacheManager Lookup Tests", () => {
   });
 
   test("dns.lookup returns ENOTFOUND when family:6 is requested but only A exists", (done) => {
-    const m = new DnsCacheManager();
-
-    jest.spyOn(m as any, "resolveWithTtl").mockResolvedValue({
+    jest.spyOn(manager as any, "resolveWithTtl").mockResolvedValue({
       addresses: { ipv4: ["93.184.216.34"], ipv6: [] },
       ttl: 60000,
     });
-
-    m.initialize();
 
     dns.lookup("onlyv4.local", { family: 6 }, (err, address, family) => {
       expect(err).toBeTruthy();
@@ -175,7 +168,6 @@ describe("DnsCacheManager Lookup Tests", () => {
   });
 
   test("promisified lookup honors family:4 / family:6", async () => {
-    manager.initialize();
     const v4 = await (dns.lookup as any).__promisify__("test-jest.local", {
       family: 4,
     });
