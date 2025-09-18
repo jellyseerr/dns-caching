@@ -114,6 +114,8 @@ describe("DnsCacheManager Lookup Tests", () => {
   });
 
   test("dns.lookup default (Force IPv4 OFF) uses cache default (ipv6-first here)", (done) => {
+    manager.clearHostname("test-jest.local");
+
     dns.lookup("test-jest.local", (err, address, family) => {
       expect(err).toBeNull();
       expect(address).toBe("2001:db8::1");

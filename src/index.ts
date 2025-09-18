@@ -151,50 +151,7 @@ export class DnsCacheManager {
 
       const forceIpv4 = reqFamily === 4;
 
-      this.lookup(hostname)
-        .then((result) => {
-          if (reqAll) {
-            const allAddresses: dns.LookupAddress[] = [
-              ...result.addresses.ipv4.map((addr) => ({
-                address: addr,
-                family: 4 as const,
-              })),
-              ...result.addresses.ipv6.map((addr) => ({
-                address: addr,
-                family: 6 as const,
-              })),
-            ];
-
-            // keep current fallback behavior if no addresses found
-            callback(
-              null,
-              allAddresses.length > 0
-                ? allAddresses
-                : [{ address: result.activeAddress, family: result.family }]
-            );
-            return;
-          }
-
-          // if a specific family is requested but no addresses of that family are found, return ENOTFOUND
-          // similar to native node.js dns.lookup behavior
-          if (reqFamily === 4 && result.addresses.ipv4.length === 0) {
-            const err = Object.assign(new Error(`ENOTFOUND ${hostname}`), {
-              code: "ENOTFOUND",
-            });
-            callback(err, undefined, undefined);
-            return;
-          }
-          if (reqFamily === 6 && result.addresses.ipv6.length === 0) {
-            const err = Object.assign(new Error(`ENOTFOUND ${hostname}`), {
-              code: "ENOTFOUND",
-            });
-            callback(err, undefined, undefined);
-            return;
-          }
-
-          // otherwise return the active address
-          callback(null, result.activeAddress, result.family);
-        })
+      this.lookup(hostname, 0, forceIpv4)
         .catch((error) => {
           this.logger.debug(
             `Cached DNS lookup failed for ${hostname}, falling back to native DNS: ${error.message}`,
@@ -268,6 +225,51 @@ export class DnsCacheManager {
           }
 
           callback(error, undefined, undefined);
+        })
+        .then((result) => {
+          if (!result) return;
+
+          if (reqAll) {
+            const allAddresses: dns.LookupAddress[] = [
+              ...result.addresses.ipv4.map((addr) => ({
+                address: addr,
+                family: 4 as const,
+              })),
+              ...result.addresses.ipv6.map((addr) => ({
+                address: addr,
+                family: 6 as const,
+              })),
+            ];
+
+            // keep current fallback behavior if no addresses found
+            callback(
+              null,
+              allAddresses.length > 0
+                ? allAddresses
+                : [{ address: result.activeAddress, family: result.family }]
+            );
+            return;
+          }
+
+          // if a specific family is requested but no addresses of that family are found, return ENOTFOUND
+          // similar to native node.js dns.lookup behavior
+          if (reqFamily === 4 && result.addresses.ipv4.length === 0) {
+            const err = Object.assign(new Error(`ENOTFOUND ${hostname}`), {
+              code: "ENOTFOUND",
+            });
+            callback(err, undefined, undefined);
+            return;
+          }
+          if (reqFamily === 6 && result.addresses.ipv6.length === 0) {
+            const err = Object.assign(new Error(`ENOTFOUND ${hostname}`), {
+              code: "ENOTFOUND",
+            });
+            callback(err, undefined, undefined);
+            return;
+          }
+
+          // otherwise return the active address
+          callback(null, result.activeAddress, result.family);
         });
     }) as LookupFunction;
 
